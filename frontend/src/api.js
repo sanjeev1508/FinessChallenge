@@ -17,19 +17,26 @@ async function request(path, options = {}) {
       headers: { "Content-Type": "application/json" },
       ...options,
     });
-  } catch {
+  } catch (error) {
+    if (options.signal?.aborted) throw error;
     throw new ApiError(0, { error: { code: "NETWORK", message: "Can't reach the server. Check that it is running." } });
   }
-  const body = await res.json().catch(() => null);
+  let body;
+  try {
+    body = await res.json();
+  } catch (error) {
+    if (options.signal?.aborted) throw error;
+    throw new ApiError(res.status, { error: { code: "INVALID_RESPONSE", message: "The server returned an invalid response. Please try again." } });
+  }
   if (!res.ok) throw new ApiError(res.status, body);
   return body;
 }
 
 export const api = {
-  leaderboard: (trendDays = 7) => request(`/leaderboard?trendDays=${trendDays}`),
-  users: () => request("/users"),
-  user: (id) => request(`/users/${id}`),
-  dashboard: (id, days = 30) => request(`/users/${id}/dashboard?days=${days}`),
+  leaderboard: (trendDays = 7, options = {}) => request(`/leaderboard?trendDays=${trendDays}`, options),
+  users: (options = {}) => request("/users", options),
+  user: (id, options = {}) => request(`/users/${id}`, options),
+  dashboard: (id, days = 30, options = {}) => request(`/users/${id}/dashboard?days=${days}`, options),
   register: (data) => request("/users", { method: "POST", body: JSON.stringify(data) }),
   logActivity: (data) => request("/activities", { method: "POST", body: JSON.stringify(data) }),
 };
