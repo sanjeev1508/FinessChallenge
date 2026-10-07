@@ -52,7 +52,7 @@ flowchart LR
 
 1. Pydantic validates the envelope (types, enums, `extra="forbid"`), then a model validator checks the sport ↔ metricType pairing (**400 SPORT_METRIC_MISMATCH**) and the value's type, format and bounds (**400 VALIDATION_ERROR**). Valid values are converted to exact integers (metres, seconds, steps).
 2. Service confirms the user exists (**404 USER_NOT_FOUND**).
-3. If `clientRequestId` was already used by this user, the original activity is returned with **200** and `Idempotent-Replay: true`. Nothing is written twice.
+3. If `clientRequestId` was already used by this user, normalized sport, metric, value, notes and any explicit activity date must match. Matching retries return the original activity with **200** and `Idempotent-Replay: true`; changed payloads return **409 IDEMPOTENCY_CONFLICT**. An omitted date retains the original date on replay, including retries after midnight. Nothing is written twice.
 4. For steps, one entry per user per day (**409 DAILY_STEPS_EXISTS**).
 5. Points are calculated, the activity is inserted, and `leaderboard_entries` is incremented with an atomic `UPDATE … SET total_points = total_points + :p`, all in **one transaction**. Response **201** with the normalised value and awarded points.
 
@@ -130,7 +130,7 @@ Base path `/api`. JSON in and out. Interactive OpenAPI docs: `http://localhost:8
 |---|---|
 | 400 | `VALIDATION_ERROR`, `SPORT_METRIC_MISMATCH`, `INVALID_JSON` (FastAPI's default 422 is remapped to 400 as the spec requires) |
 | 404 | `USER_NOT_FOUND`, `NOT_FOUND` |
-| 409 | `DUPLICATE_USER`, `DAILY_STEPS_EXISTS` |
+| 409 | `DUPLICATE_USER`, `DAILY_STEPS_EXISTS`, `IDEMPOTENCY_CONFLICT` |
 | 500 | `INTERNAL_ERROR` (logged server-side; no stack trace leaked) |
 
 ### `POST /api/users`: register
@@ -166,7 +166,7 @@ Responses: **201** `{ "userId": "uuid", "firstName", "lastName", "email", "creat
 | `value` (count) | JSON integer, 1–200,000. Floats like `10.5` and strings rejected |
 | `activityDate` | optional ISO date, default today, not in the future, not older than 365 days |
 | `notes` | optional, ≤ 280 chars |
-| `clientRequestId` | optional idempotency key, ≤ 64 chars |
+| `clientRequestId` | optional idempotency key, ≤ 64 chars; reusing it with a different payload returns 409 |
 
 Responses: **201** (new) or **200** with `Idempotent-Replay: true` (retry):
 ```json

@@ -98,6 +98,18 @@ def _find_replay(db: Session, user_id: str, key: str | None) -> Activity | None:
     return db.scalar(select(Activity).where(Activity.user_id == user_id, Activity.client_request_id == key))
 
 
+def _validate_replay(activity: Activity, data: ActivityCreate) -> None:
+    n = data.normalized
+    if (activity.sport != data.sport or activity.metric_type != data.metricType
+            or activity.distance_m != n["distance_m"] or activity.duration_s != n["duration_s"]
+            or activity.steps != n["steps"]
+            or (data.activityDate is not None and activity.activity_date != data.activityDate)
+            or activity.notes != ((data.notes or "").strip() or None)):
+        raise ApiError(409, "IDEMPOTENCY_CONFLICT",
+                       "This clientRequestId was already used for a different activity. "
+                       "Use a new key for a new submission.")
+
+
 def _steps_conflict(db: Session, user_id: str, day: date) -> Activity | None:
     return db.scalar(select(Activity).where(Activity.user_id == user_id, Activity.sport == "steps",
                                             Activity.activity_date == day))
@@ -108,6 +120,7 @@ def create_activity(db: Session, data: ActivityCreate) -> tuple[Activity, bool]:
     get_user(db, data.userId)
     replay = _find_replay(db, data.userId, data.clientRequestId)
     if replay:
+        _validate_replay(replay, data)
         return replay, True
 
     day = data.activityDate or date.today()
@@ -138,6 +151,7 @@ def create_activity(db: Session, data: ActivityCreate) -> tuple[Activity, bool]:
         db.rollback()
         replay = _find_replay(db, data.userId, data.clientRequestId)
         if replay:
+            _validate_replay(replay, data)
             return replay, True
         if data.sport == "steps" and _steps_conflict(db, data.userId, day):
             raise _steps_error(day)
