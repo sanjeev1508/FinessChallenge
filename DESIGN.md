@@ -4,7 +4,7 @@ A full-stack app that turns running, walking, cycling, swimming, gym and daily s
 
 | Layer | Choice | Why |
 |---|---|---|
-| Frontend | React 18 + Vite, Recharts, React Router (HashRouter) | Component model fits the leaderboard/dashboard split; Recharts gives accessible SVG charts with little code |
+| Frontend | React 18 + Vite 7, Recharts, React Router 7 (HashRouter) | Component model fits the leaderboard/dashboard split; Recharts gives SVG charts with little code. Patched Vite/router versions remove the audited advisories; UI development requires Node 20.19+ or 22.12+ |
 | Backend | Python 3.10+, FastAPI, Pydantic v2 | Declarative request validation, automatic OpenAPI docs at `/docs` |
 | Persistence | SQLite via SQLAlchemy 2.0, in-memory by default | Zero setup; switch to a file with one env var |
 | Tests | pytest + FastAPI TestClient (39 tests) | Scoring edge cases, validation, concurrency, ranking |
