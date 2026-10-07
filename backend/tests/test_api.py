@@ -1,7 +1,10 @@
 import threading
-from datetime import date, timedelta
+from datetime import date, datetime, time, timedelta, timezone
 
 import pytest
+
+from app.database import SessionLocal
+from app.models import Activity, User
 
 
 # ------------------------------------------------------------ registration
@@ -178,7 +181,12 @@ def test_leaderboard_ranking_ties_and_trend(client):
     for name in ["Ann", "Bob", "Cat"]:
         ids[name] = client.post("/api/users", json={"firstName": name, "lastName": "Test"}).json()["userId"]
     old = str(date.today() - timedelta(days=10))
-    post(client, ids["Ann"], "running", "distance", 5, activityDate=old)   # Ann led 10 days ago
+    activity = post(client, ids["Ann"], "running", "distance", 5, activityDate=old).json()
+    with SessionLocal() as db:
+        timestamp = datetime.combine(date.fromisoformat(old), time.min, tzinfo=timezone.utc)
+        db.get(User, ids["Ann"]).created_at = timestamp
+        db.get(Activity, activity["activityId"]).created_at = timestamp
+        db.commit()
     post(client, ids["Bob"], "running", "distance", 6)                     # Bob overtakes today
     post(client, ids["Cat"], "running", "distance", 6)                     # tie with Bob
     board = client.get("/api/leaderboard").json()["entries"]
@@ -187,6 +195,35 @@ def test_leaderboard_ranking_ties_and_trend(client):
     assert ranks["Ann"]["rank"] == 3
     assert ranks["Ann"]["trend"] == "down" and ranks["Ann"]["rankChange"] == -2
     assert ranks["Bob"]["trend"] == "new"  # registered after the comparison date
+
+
+def test_backdated_submission_does_not_rewrite_previous_rank(client, user_id):
+    old = date.today() - timedelta(days=10)
+    with SessionLocal() as db:
+        db.get(User, user_id).created_at = datetime.combine(old, time.min, tzinfo=timezone.utc)
+        db.commit()
+    before = client.get("/api/leaderboard").json()["entries"][0]
+    post(client, user_id, "running", "distance", 5, activityDate=str(old))
+    after = client.get("/api/leaderboard").json()["entries"][0]
+    assert after["previousRank"] == before["previousRank"]
+    assert after["pointsInPeriod"] == 500
+    assert after["trend"] == "same"
+
+
+def test_historical_standings_exclude_next_day_midnight(client, user_id):
+    cutoff = date.today() - timedelta(days=7)
+    a = post(client, user_id, "running", "distance", 1).json()
+    b = post(client, user_id, "running", "distance", 2).json()
+    boundary = datetime.combine(cutoff + timedelta(days=1), time.min, tzinfo=timezone.utc)
+    with SessionLocal() as db:
+        db.get(User, user_id).created_at = boundary - timedelta(days=1)
+        db.get(Activity, a["activityId"]).created_at = boundary - timedelta(microseconds=1)
+        db.get(Activity, b["activityId"]).created_at = boundary
+        db.commit()
+    entry = client.get("/api/leaderboard").json()["entries"][0]
+    assert entry["previousRank"] == 1
+    assert entry["totalPoints"] == 300
+    assert entry["pointsInPeriod"] == 200
 
 
 def test_dashboard(client, user_id):

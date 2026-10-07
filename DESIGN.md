@@ -250,7 +250,7 @@ Any user's dashboard is viewable via `/dashboard/:id`, which makes the leaderboa
 
 **Ranking strategy** (server-side, `services.leaderboard`):
 - **Standard competition ranking** ("1-2-2-4"): tied totals share a rank and the next rank skips. Display order within a tie is alphabetical, which is stable and doesn't imply a hidden winner.
-- **Trend**: the server recomputes each user's total as of the end of the day `trendDays` ago (`SUM(points) WHERE activity_date <= cutoff`), ranks that snapshot the same way, and returns `rankChange = previousRank − currentRank` (positive = climbed). Users who joined after the cutoff with no earlier activity are `new` rather than shown as a misleading jump.
+- **Trend**: historical standings use submission timestamps (`SUM(points) WHERE created_at < midnight UTC after the cutoff day`). Only users registered before that boundary participate in previous ranks. `rankChange = previousRank − currentRank` (positive = climbed); later registrants are `new`. Logging a backdated workout today changes current points but never rewrites past standings. Period points likewise count submissions since that boundary; dashboard training charts continue to use workout dates. Seeded demo data simulates historical registration and submission timestamps.
 - Ranks are computed on the server so every client agrees; the frontend never re-ranks.
 
 The points preview on the log form mirrors the server formula for instant feedback, but the server always recomputes and its number is what gets stored and shown.
@@ -266,7 +266,7 @@ The points preview on the log form mirrors the server formula for instant feedba
 | In-memory SQLite (default) | No setup, fast, clean slate per run | Data is lost on restart. Set `DATABASE_URL=sqlite:///./fitness.db` to persist; demo data is reseeded on an empty DB |
 | Single shared connection + lock for in-memory mode | In-memory SQLite is per-connection, so sharing one connection is the only way the whole app sees one DB; the lock keeps transactions from interleaving | Writes are serialised. At ~1 ms per request that is hundreds of req/s, ample here. File mode uses a normal pool with WAL + busy timeout |
 | Materialised `leaderboard_entries` | O(users) leaderboard reads | Two writes per activity, kept consistent by a single transaction and atomic `UPDATE x = x + n`; rebuildable from `activities` |
-| Trend computed on read from activities | Always correct, no snapshot jobs | O(activities) query per leaderboard load; at scale replace with nightly `leaderboard_snapshots` |
+| Trend computed on read from submission timestamps | Backdated workouts cannot rewrite past ranks; no snapshot jobs | O(activities) query per leaderboard load; assumes the current append-only activity model. Future edit/delete features need an immutable event log or snapshots |
 | Points stored at write time | Fast reads, history stable if rules change | Rule changes need an explicit rescoring migration |
 | Name-based identity (per spec) | Matches the requirement exactly | Two real people with the same name can't both join; a production system would use email or auth. Email is collected to make that move easy |
 | No authentication | In scope for the assignment | Anyone can log activities for anyone; the "who am I" choice is a browser convenience only |

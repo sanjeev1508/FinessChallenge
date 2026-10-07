@@ -10,7 +10,7 @@ from .errors import ApiError
 from .models import SPORTS, Activity, LeaderboardEntry, User, utcnow
 from .schemas import ActivityCreate, UserCreate, normalise_name
 from .scoring import calculate_points
-from datetime import datetime, timezone
+from datetime import datetime, time, timezone
 
 
 def as_utc(dt: datetime | None) -> datetime | None:
@@ -199,14 +199,14 @@ def leaderboard(db: Session, trend_days: int = 7, limit: int | None = None) -> d
         select(User, LeaderboardEntry).join(LeaderboardEntry, LeaderboardEntry.user_id == User.id)
     ).all()
     cutoff = date.today() - timedelta(days=trend_days)
-    # Points each user had at the end of the cutoff day -> previous rank.
+    cutoff_end = datetime.combine(cutoff + timedelta(days=1), time.min, tzinfo=timezone.utc)
+    # Submission time preserves the standings even when workouts are backdated.
     prev_totals = dict(db.execute(
         select(Activity.user_id, func.coalesce(func.sum(Activity.points), 0))
-        .where(Activity.activity_date <= cutoff).group_by(Activity.user_id)
+        .where(Activity.created_at < cutoff_end).group_by(Activity.user_id)
     ).all())
     # Only users who already existed at the cutoff have a previous rank.
-    existed = [(u.id, int(prev_totals.get(u.id, 0))) for u, _ in rows if as_utc(u.created_at).date() <= cutoff
-               or u.id in prev_totals]
+    existed = [(u.id, int(prev_totals.get(u.id, 0))) for u, _ in rows if as_utc(u.created_at) < cutoff_end]
     prev_rank = competition_rank(existed)
     cur_rank = competition_rank([(u.id, lb.total_points) for u, lb in rows])
 
