@@ -16,6 +16,10 @@ def utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def utc_today() -> date:
+    return utcnow().date()
+
+
 def new_uuid() -> str:
     return str(uuid.uuid4())
 

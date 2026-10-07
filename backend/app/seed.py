@@ -3,6 +3,7 @@ import random
 from datetime import date, datetime, time, timedelta, timezone
 
 from .schemas import ActivityCreate, UserCreate
+from .models import utc_today
 from . import services
 
 DEMO_USERS = [("Priya", "Raman"), ("Arjun", "Mehta"), ("Kavya", "Iyer"), ("Rahul", "Nair"),
@@ -38,7 +39,7 @@ def seed_demo(db) -> None:
     if services.list_users(db):
         return
     rng = random.Random(42)
-    today = date.today()
+    today = utc_today()
     for first, last in DEMO_USERS:
         user = services.register_user(db, UserCreate(firstName=first, lastName=last))
         user.created_at = datetime.combine(today - timedelta(days=35), time.min, tzinfo=timezone.utc)

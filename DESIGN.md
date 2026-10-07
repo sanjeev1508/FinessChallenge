@@ -164,7 +164,7 @@ Responses: **201** `{ "userId": "uuid", "firstName", "lastName", "email", "creat
 | `value` (distance) | JSON number of km, > 0, ≤ 1000, max 3 decimal places (metre precision). Strings, booleans, NaN/Infinity rejected |
 | `value` (duration) | `"min:sec"` string, minutes 0–1440, seconds `00`–`59`, total > 0 and ≤ 24 h |
 | `value` (count) | JSON integer, 1–200,000. Floats like `10.5` and strings rejected |
-| `activityDate` | optional ISO date, default today, not in the future, not older than 365 days |
+| `activityDate` | optional ISO date, default today in UTC, not in the future, not older than 365 days |
 | `notes` | optional, ≤ 280 chars |
 | `clientRequestId` | optional idempotency key, ≤ 64 chars; reusing it with a different payload returns 409 |
 
@@ -258,6 +258,8 @@ Any user's dashboard is viewable via `/dashboard/:id`, which makes the leaderboa
 The points preview on the log form mirrors the server formula for instant feedback, but the server always recomputes and its number is what gets stored and shown.
 
 Read requests share `useApiRead`: superseded requests are aborted and guarded so late data/errors cannot replace the current athlete or period. Cleanup cancels reads on unmount; the user picker surfaces loading and retryable failures. Native Node tests exercise out-of-order responses, stale failures and cancellation without another test framework.
+
+**Calendar policy:** UTC defines today, date validation, daily-step uniqueness, streaks, chart windows and ranking cutoffs. The activity form defaults to the UTC date and labels it; date-only labels explicitly format in UTC so western timezones cannot shift a comparison date backward. Recorded workout dates remain date-only values, not browser-local timestamps.
 
 ---
 

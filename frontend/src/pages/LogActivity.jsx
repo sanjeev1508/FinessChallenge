@@ -4,11 +4,7 @@ import { api, requestId } from "../api.js";
 import { SPORTS, SPORT_KEYS, describeValue, fmt, previewPoints } from "../sports.js";
 import { ErrorBox } from "../components/Status.jsx";
 import UserPicker from "../components/UserPicker.jsx";
-
-const todayISO = () => {
-  const d = new Date();
-  return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
-};
+import { todayISO } from "../calendar.js";
 
 export default function LogActivity({ userId, setUserId }) {
   const welcome = useLocation().state?.welcome;
@@ -109,7 +105,7 @@ export default function LogActivity({ userId, setUserId }) {
         )}
 
         <div className="row-2">
-          <label>Date
+          <label>Date (UTC)
             <input type="date" value={date} max={todayISO()} onChange={(e) => setDate(e.target.value)} />
           </label>
           <label><span>Note <span className="optional">optional</span></span>

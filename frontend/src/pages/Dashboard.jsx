@@ -7,6 +7,7 @@ import { SPORTS, SPORT_KEYS, describeValue, fmt } from "../sports.js";
 import { ErrorBox, Loading } from "../components/Status.jsx";
 import UserPicker from "../components/UserPicker.jsx";
 import { useApiRead } from "../useApiRead.js";
+import { formatDate } from "../calendar.js";
 
 const WINDOWS = [14, 30, 90];
 const VOLUME = {
@@ -16,7 +17,7 @@ const VOLUME = {
   stepCount: { label: "Steps", key: "stepCount", unit: "steps" },
 };
 
-const shortDate = (iso) => new Date(iso + "T00:00:00").toLocaleDateString(undefined, { day: "numeric", month: "short" });
+const shortDate = (iso) => formatDate(iso, { day: "numeric", month: "short" });
 const axis = { fontSize: 12, fill: "var(--ink-soft)" };
 
 function Stat({ value, label, sub }) {
