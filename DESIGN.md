@@ -7,7 +7,7 @@ A full-stack app that turns running, walking, cycling, swimming, gym and daily s
 | Frontend | React 18 + Vite 7, Recharts, React Router 7 (HashRouter) | Component model fits the leaderboard/dashboard split; Recharts gives SVG charts with little code. Patched Vite/router versions remove the audited advisories; UI development requires Node 20.19+ or 22.12+ |
 | Backend | Python 3.10+, FastAPI, Pydantic v2 | Declarative request validation, automatic OpenAPI docs at `/docs` |
 | Persistence | SQLite via SQLAlchemy 2.0, in-memory by default | Zero setup; switch to a file with one env var |
-| Tests | pytest + FastAPI TestClient (39 tests) | Scoring edge cases, validation, concurrency, ranking |
+| Tests | pytest + FastAPI TestClient; Node's built-in test runner | Backend scoring, validation, concurrency, historical ranking and UTC boundaries; frontend previews, request races, API errors, date formatting and bundle budgets |
 
 ---
 
@@ -307,4 +307,7 @@ The dashboard is route-lazy-loaded, keeping Recharts out of the initial leaderbo
 | Unhandled exceptions | Logged; client gets a generic 500 envelope with no internals |
 
 ### What I'd add for production
-Authentication (OAuth / email magic link) and per-user authorization; PostgreSQL with the same schema; Alembic migrations; rate limiting on POST endpoints; leaderboard snapshots and caching; pagination on activity lists; structured logging and metrics; containerised deployment with CI running the test suite.
+Authentication (OAuth / email magic link) and per-user authorization; PostgreSQL with the same schema; Alembic migrations; rate limiting on POST endpoints; leaderboard snapshots and caching; pagination on activity lists; structured logging and metrics; containerised deployment.
+
+### Continuous integration
+GitHub Actions checks Windows/Linux and Python 3.10/3.14 against memory and persistent SQLite. A Node 22 job installs from the lockfile, audits dependencies, builds, runs frontend regressions and checks that the committed static bundle matches source. Tests enforce an initial JavaScript budget of 250 kB and a 500 kB maximum per chunk. No additional test framework is required.
