@@ -1,0 +1,4 @@
+fastapi>=0.110,<1.0
+uvicorn>=0.27
+SQLAlchemy>=2.0.30,<3.0
+pydantic>=2.7,<3.0
