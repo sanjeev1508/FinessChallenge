@@ -261,6 +261,8 @@ Read requests share `useApiRead`: superseded requests are aborted and guarded so
 
 **Calendar policy:** UTC defines today, date validation, daily-step uniqueness, streaks, chart windows and ranking cutoffs. The activity form defaults to the UTC date and labels it; date-only labels explicitly format in UTC so western timezones cannot shift a comparison date backward. Recorded workout dates remain date-only values, not browser-local timestamps.
 
+The dashboard is route-lazy-loaded, keeping Recharts out of the initial leaderboard bundle. Suspense displays a loading state and a page error boundary offers an explicit reload if a chunk fails. The production build retains Vite's default 500 kB chunk warning rather than hiding it.
+
 ---
 
 ## f. Trade-offs & edge cases
