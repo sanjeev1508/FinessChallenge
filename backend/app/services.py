@@ -240,10 +240,10 @@ def dashboard(db: Session, user_id: str, days: int = 30) -> dict:
     today = date.today()
     start = today - timedelta(days=days - 1)
 
-    by_sport = {s: {"sport": s, "points": 0, "count": 0, "distanceKm": 0.0, "durationMinutes": 0, "steps": 0}
+    by_sport = {s: {"sport": s, "points": 0, "count": 0, "distanceKm": 0.0, "durationSeconds": 0, "steps": 0}
                 for s in SPORTS}
     timeline = {start + timedelta(days=i): {"date": (start + timedelta(days=i)).isoformat(), "points": 0,
-                                            "distanceKm": 0.0, "durationMinutes": 0, "stepCount": 0,
+                                            "distanceKm": 0.0, "durationSeconds": 0, "stepCount": 0,
                                             # per-sport points, keyed by sport name
                                             **{s: 0 for s in SPORTS}}
                 for i in range(days)}
@@ -253,7 +253,7 @@ def dashboard(db: Session, user_id: str, days: int = 30) -> dict:
         s["points"] += a.points
         s["count"] += 1
         s["distanceKm"] += (a.distance_m or 0) / 1000
-        s["durationMinutes"] += (a.duration_s or 0) // 60
+        s["durationSeconds"] += a.duration_s or 0
         s["steps"] += a.steps or 0
         active_days.add(a.activity_date)
         t = timeline.get(a.activity_date)
@@ -261,13 +261,15 @@ def dashboard(db: Session, user_id: str, days: int = 30) -> dict:
             t["points"] += a.points
             t[a.sport] += a.points
             t["distanceKm"] += (a.distance_m or 0) / 1000
-            t["durationMinutes"] += (a.duration_s or 0) // 60
+            t["durationSeconds"] += a.duration_s or 0
             t["stepCount"] += a.steps or 0
 
     for s in by_sport.values():
         s["distanceKm"] = round(s["distanceKm"], 3)
+        s["durationMinutes"] = s["durationSeconds"] / 60
     for t in timeline.values():
         t["distanceKm"] = round(t["distanceKm"], 3)
+        t["durationMinutes"] = t["durationSeconds"] / 60
 
     # Streak: consecutive active days ending today (or yesterday, so it isn't
     # broken before the user has logged today's workout).

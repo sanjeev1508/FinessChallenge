@@ -246,6 +246,8 @@ src/
 | Sport preference | Donut + legend with share, sessions and raw volume | `bySport[]` |
 | Recent activities | Table | last 15 activities |
 
+Duration volume sums full recorded seconds (`durationSeconds`) and derives fractional `durationMinutes` for charts. Only scoring floors each session to completed minutes; a 1:55 gym session retains 115 seconds of volume while earning 5 points. Zero-point sessions remain visible without dividing by zero in sport shares.
+
 Any user's dashboard is viewable via `/dashboard/:id`, which makes the leaderboard explorable.
 
 **Ranking strategy** (server-side, `services.leaderboard`):

@@ -239,6 +239,20 @@ def test_dashboard(client, user_id):
     assert last["steps"] == 12 and last["stepCount"] == 1234  # sport points vs volume never collide
 
 
+def test_dashboard_preserves_seconds_without_changing_points(client, user_id):
+    for sport, value, points in [("gym", "1:55", 5), ("gym", "0:59", 0), ("swimming", "0:30", 0)]:
+        assert post(client, user_id, sport, "duration", value).json()["points"] == points
+    d = client.get(f"/api/users/{user_id}/dashboard").json()
+    sports = {s["sport"]: s for s in d["bySport"]}
+    assert sports["gym"]["durationSeconds"] == 174
+    assert sports["gym"]["durationMinutes"] == pytest.approx(174 / 60)
+    assert sports["swimming"]["durationSeconds"] == 30
+    assert sports["swimming"]["durationMinutes"] == 0.5
+    assert d["timeline"][-1]["durationSeconds"] == 204
+    assert d["timeline"][-1]["durationMinutes"] == pytest.approx(204 / 60)
+    assert d["summary"]["totalPoints"] == 5
+
+
 def test_unknown_api_route_is_json_404(client):
     r = client.get("/api/nope")
     assert r.status_code == 404 and r.json()["error"]["code"] == "NOT_FOUND"
