@@ -31,7 +31,7 @@ export default function App() {
         </Routes>
       </main>
       <footer className="footer">
-        Points: running 100/km, walking 50/km, cycling 25/km, swimming 15/min, gym 5/min, 1 per 100 steps.
+        Points: running 100/km, walking 50/km, cycling 25/km, swimming 15/min, gym 5/min, 1 per 100 steps. All calendar days use UTC.
       </footer>
     </div>
   );

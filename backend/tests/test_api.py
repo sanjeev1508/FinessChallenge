@@ -4,7 +4,7 @@ from datetime import date, datetime, time, timedelta, timezone
 import pytest
 
 from app.database import SessionLocal
-from app.models import Activity, User
+from app.models import Activity, User, utc_today
 
 
 # ------------------------------------------------------------ registration
@@ -68,7 +68,7 @@ def test_ingest_each_sport(client, user_id):
              ("cycling", "distance", 20, 500), ("swimming", "duration", "1:55", 15),
              ("gym", "duration", "45:30", 225), ("steps", "count", 399, 3)]
     for sport, metric, value, pts in cases:
-        r = post(client, user_id, sport, metric, value, activityDate=str(date.today() - timedelta(days=1)))
+        r = post(client, user_id, sport, metric, value, activityDate=str(utc_today() - timedelta(days=1)))
         assert r.status_code == 201, r.json()
         assert r.json()["points"] == pts
     assert client.get(f"/api/users/{user_id}").json()["totalPoints"] == sum(c[3] for c in cases)
@@ -103,7 +103,7 @@ def test_bad_user_and_dates(client, user_id):
     r = post(client, "00000000-0000-0000-0000-000000000000", "running", "distance", 1)
     assert r.status_code == 404 and r.json()["error"]["code"] == "USER_NOT_FOUND"
     assert post(client, user_id, "running", "distance", 1,
-                activityDate=str(date.today() + timedelta(days=1))).status_code == 400
+                activityDate=str(utc_today() + timedelta(days=1))).status_code == 400
 
 
 def test_one_steps_entry_per_day(client, user_id):
@@ -124,7 +124,7 @@ def test_idempotency_key(client, user_id):
 @pytest.mark.parametrize("changed", [
     {"value": 5},
     {"sport": "walking"},
-    {"activityDate": str(date.today() - timedelta(days=1))},
+    {"activityDate": str(utc_today() - timedelta(days=1))},
     {"notes": "Different workout"},
 ])
 def test_idempotency_rejects_changed_payload(client, user_id, changed):
@@ -180,7 +180,7 @@ def test_leaderboard_ranking_ties_and_trend(client):
     ids = {}
     for name in ["Ann", "Bob", "Cat"]:
         ids[name] = client.post("/api/users", json={"firstName": name, "lastName": "Test"}).json()["userId"]
-    old = str(date.today() - timedelta(days=10))
+    old = str(utc_today() - timedelta(days=10))
     activity = post(client, ids["Ann"], "running", "distance", 5, activityDate=old).json()
     with SessionLocal() as db:
         timestamp = datetime.combine(date.fromisoformat(old), time.min, tzinfo=timezone.utc)
@@ -198,7 +198,7 @@ def test_leaderboard_ranking_ties_and_trend(client):
 
 
 def test_backdated_submission_does_not_rewrite_previous_rank(client, user_id):
-    old = date.today() - timedelta(days=10)
+    old = utc_today() - timedelta(days=10)
     with SessionLocal() as db:
         db.get(User, user_id).created_at = datetime.combine(old, time.min, tzinfo=timezone.utc)
         db.commit()
@@ -211,7 +211,7 @@ def test_backdated_submission_does_not_rewrite_previous_rank(client, user_id):
 
 
 def test_historical_standings_exclude_next_day_midnight(client, user_id):
-    cutoff = date.today() - timedelta(days=7)
+    cutoff = utc_today() - timedelta(days=7)
     a = post(client, user_id, "running", "distance", 1).json()
     b = post(client, user_id, "running", "distance", 2).json()
     boundary = datetime.combine(cutoff + timedelta(days=1), time.min, tzinfo=timezone.utc)
@@ -251,6 +251,25 @@ def test_dashboard_preserves_seconds_without_changing_points(client, user_id):
     assert d["timeline"][-1]["durationSeconds"] == 204
     assert d["timeline"][-1]["durationMinutes"] == pytest.approx(204 / 60)
     assert d["summary"]["totalPoints"] == 5
+
+
+def test_utc_day_controls_defaults_validation_and_windows(client, user_id, monkeypatch):
+    from app import models
+
+    now = datetime(2026, 10, 7, 23, 59, 59, tzinfo=timezone.utc)
+    monkeypatch.setattr(models, "utcnow", lambda: now)
+    activity = post(client, user_id, "steps", "count", 100)
+    assert activity.json()["activityDate"] == "2026-10-07"
+    assert post(client, user_id, "running", "distance", 1, activityDate="2026-10-08").status_code == 400
+    assert client.get("/api/leaderboard").json()["comparedTo"] == "2026-09-30"
+    d = client.get(f"/api/users/{user_id}/dashboard").json()
+    assert d["timeline"][-1]["date"] == "2026-10-07"
+    assert d["summary"]["currentStreakDays"] == 1
+    now += timedelta(seconds=1)
+    assert post(client, user_id, "steps", "count", 200).status_code == 201
+    d = client.get(f"/api/users/{user_id}/dashboard").json()
+    assert d["timeline"][-1]["date"] == "2026-10-08"
+    assert d["summary"]["currentStreakDays"] == 2
 
 
 def test_unknown_api_route_is_json_404(client):

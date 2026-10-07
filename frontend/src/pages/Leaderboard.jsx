@@ -4,6 +4,7 @@ import { api } from "../api.js";
 import { fmt } from "../sports.js";
 import { ErrorBox, Loading } from "../components/Status.jsx";
 import { useApiRead } from "../useApiRead.js";
+import { formatDate } from "../calendar.js";
 
 const PERIODS = [{ days: 7, label: "This week" }, { days: 30, label: "30 days" }];
 
@@ -94,7 +95,7 @@ export default function Leaderboard({ currentUserId }) {
       )}
       {data && (
         <p className="fineprint">
-          Ties share a rank. Movement compares today with standings on {new Date(data.comparedTo).toLocaleDateString()}.
+          Ties share a rank. Movement compares today with standings at the end of {formatDate(data.comparedTo)} (UTC).
           Movement and period points use submission dates, not backdated workout dates. Updates every 30 seconds.
         </p>
       )}

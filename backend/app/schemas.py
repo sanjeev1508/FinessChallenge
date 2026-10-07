@@ -11,6 +11,7 @@ from pydantic import (BaseModel, ConfigDict, Field, StrictFloat, StrictInt,
 from pydantic_core import PydanticCustomError
 
 from . import config
+from .models import utc_today
 from .scoring import SPORT_METRIC, ScoringError, km_to_metres, parse_duration
 
 Sport = Literal["running", "walking", "cycling", "swimming", "gym", "steps"]
@@ -103,7 +104,7 @@ class ActivityCreate(BaseModel):
     def _date(cls, v: Optional[date]) -> Optional[date]:
         if v is None:
             return v
-        today = date.today()
+        today = utc_today()
         if v > today:
             raise ValueError("cannot be in the future")
         if v < today - timedelta(days=config.MAX_ACTIVITY_AGE_DAYS):

@@ -7,7 +7,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from .errors import ApiError
-from .models import SPORTS, Activity, LeaderboardEntry, User, utcnow
+from .models import SPORTS, Activity, LeaderboardEntry, User, utc_today, utcnow
 from .schemas import ActivityCreate, UserCreate, normalise_name
 from .scoring import calculate_points
 from datetime import datetime, time, timezone
@@ -123,7 +123,7 @@ def create_activity(db: Session, data: ActivityCreate) -> tuple[Activity, bool]:
         _validate_replay(replay, data)
         return replay, True
 
-    day = data.activityDate or date.today()
+    day = data.activityDate or utc_today()
     if data.sport == "steps" and _steps_conflict(db, data.userId, day):
         raise _steps_error(day)
 
@@ -198,7 +198,7 @@ def leaderboard(db: Session, trend_days: int = 7, limit: int | None = None) -> d
     rows = db.execute(
         select(User, LeaderboardEntry).join(LeaderboardEntry, LeaderboardEntry.user_id == User.id)
     ).all()
-    cutoff = date.today() - timedelta(days=trend_days)
+    cutoff = utc_today() - timedelta(days=trend_days)
     cutoff_end = datetime.combine(cutoff + timedelta(days=1), time.min, tzinfo=timezone.utc)
     # Submission time preserves the standings even when workouts are backdated.
     prev_totals = dict(db.execute(
@@ -237,7 +237,7 @@ def dashboard(db: Session, user_id: str, days: int = 30) -> dict:
     user = get_user(db, user_id)
     acts = list(db.scalars(select(Activity).where(Activity.user_id == user_id)
                            .order_by(Activity.activity_date, Activity.id)))
-    today = date.today()
+    today = utc_today()
     start = today - timedelta(days=days - 1)
 
     by_sport = {s: {"sport": s, "points": 0, "count": 0, "distanceKm": 0.0, "durationSeconds": 0, "steps": 0}

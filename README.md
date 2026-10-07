@@ -34,6 +34,8 @@ set DATABASE_URL=sqlite:///./fitness.db && start.bat
 
 Set `SEED_DEMO=false` to start with an empty board.
 
+All calendar days use UTC, including activity dates, daily steps, streaks and ranking comparisons.
+
 ## Manual setup (developers)
 
 ```bash
