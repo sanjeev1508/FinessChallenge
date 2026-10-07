@@ -255,7 +255,7 @@ Any user's dashboard is viewable via `/dashboard/:id`, which makes the leaderboa
 - **Trend**: historical standings use submission timestamps (`SUM(points) WHERE created_at < midnight UTC after the cutoff day`). Only users registered before that boundary participate in previous ranks. `rankChange = previousRank − currentRank` (positive = climbed); later registrants are `new`. Logging a backdated workout today changes current points but never rewrites past standings. Period points likewise count submissions since that boundary; dashboard training charts continue to use workout dates. Seeded demo data simulates historical registration and submission timestamps.
 - Ranks are computed on the server so every client agrees; the frontend never re-ranks.
 
-The points preview on the log form mirrors the server formula for instant feedback, but the server always recomputes and its number is what gets stored and shown.
+The points preview on the log form mirrors the server formula and metric bounds for instant feedback. Invalid inputs do not preview awardable points; the server always validates and recomputes, and its number is what gets stored and shown. Decimal strings are converted directly to integer metres rather than rounded across a point boundary.
 
 Read requests share `useApiRead`: superseded requests are aborted and guarded so late data/errors cannot replace the current athlete or period. Cleanup cancels reads on unmount; the user picker surfaces loading and retryable failures. Native Node tests exercise out-of-order responses, stale failures and cancellation without another test framework.
 

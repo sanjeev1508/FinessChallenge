@@ -14,15 +14,22 @@ export const SPORT_KEYS = Object.keys(SPORTS);
 export function previewPoints(sport, { km, minutes, seconds, steps }) {
   const s = SPORTS[sport];
   if (s.metric === "distance") {
-    const metres = Math.round(Number(km) * 1000);
-    return Number.isFinite(metres) && metres > 0 ? Math.floor((metres * s.rate) / 1000) : 0;
+    const value = Number(km);
+    if (!Number.isFinite(value) || value <= 0 || value > 1000) return 0;
+    const [whole, fraction = ""] = String(value).split(".");
+    if (fraction.length > 3) return 0;
+    const metres = Number(whole) * 1000 + Number(fraction.padEnd(3, "0"));
+    return Math.floor((metres * s.rate) / 1000);
   }
   if (s.metric === "duration") {
-    const total = (Number(minutes) || 0) * 60 + (Number(seconds) || 0);
+    const m = Number(minutes || 0), sec = Number(seconds || 0);
+    if (!Number.isInteger(m) || !Number.isInteger(sec) || m < 0 || sec < 0 || sec > 59) return 0;
+    const total = m * 60 + sec;
+    if (total <= 0 || total > 86400) return 0;
     return Math.floor(total / 60) * s.rate;
   }
   const n = Number(steps);
-  return Number.isInteger(n) && n > 0 ? Math.floor(n / 100) : 0;
+  return Number.isInteger(n) && n > 0 && n <= 200000 ? Math.floor(n / 100) : 0;
 }
 
 export const fmt = (n) => new Intl.NumberFormat("en-IN").format(n ?? 0);
