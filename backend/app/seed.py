@@ -1,6 +1,6 @@
 """Deterministic demo data so the app is populated on first launch."""
 import random
-from datetime import date, timedelta
+from datetime import date, datetime, time, timedelta, timezone
 
 from .schemas import ActivityCreate, UserCreate
 from . import services
@@ -41,15 +41,22 @@ def seed_demo(db) -> None:
     today = date.today()
     for first, last in DEMO_USERS:
         user = services.register_user(db, UserCreate(firstName=first, lastName=last))
+        user.created_at = datetime.combine(today - timedelta(days=35), time.min, tzinfo=timezone.utc)
+        db.commit()
         activity_rate = rng.uniform(0.45, 0.85)
         for offset in range(34, -1, -1):
             day = today - timedelta(days=offset)
             if rng.random() > activity_rate:
                 continue
-            sports = set(rng.sample(PROFILES[first], k=rng.choice([1, 1, 2])))
+            sports = sorted(set(rng.sample(PROFILES[first], k=rng.choice([1, 1, 2]))))
             for sport in sports:
                 metric = {"running": "distance", "walking": "distance", "cycling": "distance",
                           "swimming": "duration", "gym": "duration", "steps": "count"}[sport]
-                services.create_activity(db, ActivityCreate(
+                activity, _ = services.create_activity(db, ActivityCreate(
                     userId=user.id, sport=sport, metricType=metric,
                     value=_value(rng, sport), activityDate=day))
+                # Demo records simulate submissions on their workout day.
+                activity.created_at = datetime.combine(day, time.min, tzinfo=timezone.utc)
+                user.leaderboard.last_activity_at = activity.created_at
+                user.leaderboard.updated_at = activity.created_at
+                db.commit()

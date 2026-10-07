@@ -72,7 +72,7 @@ export default function Leaderboard({ currentUserId }) {
         <ol className="board" aria-label="Leaderboard">
           <li className="board-row board-labels" aria-hidden="true">
             <span>Rank</span><span>Athlete</span><span>Move</span>
-            <span className="num">{period === 7 ? "Last 7 days" : "Last 30 days"}</span>
+            <span className="num">{period === 7 ? "Logged in 7 days" : "Logged in 30 days"}</span>
             <span className="num">Total points</span>
           </li>
           {entries.length === 0 && (
@@ -99,7 +99,7 @@ export default function Leaderboard({ currentUserId }) {
       {data && (
         <p className="fineprint">
           Ties share a rank. Movement compares today with standings on {new Date(data.comparedTo).toLocaleDateString()}.
-          Updates every 30 seconds.
+          Movement and period points use submission dates, not backdated workout dates. Updates every 30 seconds.
         </p>
       )}
     </section>
