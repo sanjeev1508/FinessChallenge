@@ -137,7 +137,9 @@ export default function Dashboard({ userId, setUserId }) {
                 </div>
               </div>
               <p className="panel-note">
-                {volume === "cumulative" ? "Running total of points." : `Daily ${VOLUME[volume].label.toLowerCase()} (${VOLUME[volume].unit}).`}
+                {volume === "cumulative" ? "Running total of points."
+                  : volume === "durationMinutes" ? "Full recorded duration in minutes, including seconds."
+                  : `Daily ${VOLUME[volume].label.toLowerCase()} (${VOLUME[volume].unit}).`}
               </p>
               <div className="chart">
                 <ResponsiveContainer width="100%" height={240}>
@@ -173,7 +175,7 @@ export default function Dashboard({ userId, setUserId }) {
                     <li key={s.sport}>
                       <span className="swatch" style={{ background: SPORTS[s.sport].color }} />
                       <span className="mix-name">{SPORTS[s.sport].label}</span>
-                      <span className="mix-pct">{Math.round((s.points / summary.totalPoints) * 100)}%</span>
+                      <span className="mix-pct">{summary.totalPoints > 0 ? Math.round((s.points / summary.totalPoints) * 100) : 0}%</span>
                       <small>
                         {s.count} {s.count === 1 ? "session" : "sessions"},{" "}
                         {SPORTS[s.sport].metric === "distance" ? `${fmt(Math.round(s.distanceKm))} km`
