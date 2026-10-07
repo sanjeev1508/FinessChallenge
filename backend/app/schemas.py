@@ -82,8 +82,8 @@ class ActivityCreate(BaseModel):
     activityDate: Optional[date] = None
     notes: Optional[StrictStr] = Field(default=None, max_length=280)
     clientRequestId: Optional[StrictStr] = Field(default=None, min_length=1, max_length=64,
-                                                 description="Idempotency key; retries with the same key "
-                                                             "return the original activity.")
+                                                 description="Idempotency key; matching retries return the original "
+                                                             "activity. A different payload with the same key returns 409.")
 
     # Normalised values, filled in by the validator (not part of the input).
     _distance_m: Optional[int] = None

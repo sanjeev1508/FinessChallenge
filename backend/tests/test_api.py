@@ -1,6 +1,8 @@
 import threading
 from datetime import date, timedelta
 
+import pytest
+
 
 # ------------------------------------------------------------ registration
 
@@ -114,6 +116,48 @@ def test_idempotency_key(client, user_id):
     assert b.headers["Idempotent-Replay"] == "true"
     assert a.json()["activityId"] == b.json()["activityId"]
     assert client.get(f"/api/users/{user_id}").json()["totalPoints"] == 300
+
+
+@pytest.mark.parametrize("changed", [
+    {"value": 5},
+    {"sport": "walking"},
+    {"activityDate": str(date.today() - timedelta(days=1))},
+    {"notes": "Different workout"},
+])
+def test_idempotency_rejects_changed_payload(client, user_id, changed):
+    body = {"userId": user_id, "sport": "running", "metricType": "distance",
+            "value": 1, "clientRequestId": "same-key"}
+    assert client.post("/api/activities", json=body).status_code == 201
+    r = client.post("/api/activities", json={**body, **changed})
+    assert r.status_code == 409
+    assert r.json()["error"]["code"] == "IDEMPOTENCY_CONFLICT"
+    assert "Idempotent-Replay" not in r.headers
+    user = client.get(f"/api/users/{user_id}").json()
+    assert user["totalPoints"] == 100 and user["activityCount"] == 1
+
+
+def test_idempotency_compares_normalized_values(client, user_id):
+    a = post(client, user_id, "gym", "duration", "01:55", notes=" workout ", clientRequestId="normalized")
+    b = post(client, user_id, "gym", "duration", "1:55", notes="workout", clientRequestId="normalized")
+    assert a.status_code == 201 and b.status_code == 200
+    assert a.json()["activityId"] == b.json()["activityId"]
+
+
+def test_concurrent_idempotency_conflict(client, user_id):
+    results = []
+
+    def go(value):
+        results.append(post(client, user_id, "running", "distance", value,
+                            clientRequestId="race-key"))
+
+    threads = [threading.Thread(target=go, args=(value,)) for value in [1, 5]]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+    assert sorted(r.status_code for r in results) == [201, 409]
+    accepted = next(r.json() for r in results if r.status_code == 201)
+    assert client.get(f"/api/users/{user_id}").json()["totalPoints"] == accepted["points"]
 
 
 def test_concurrent_ingestion_totals_consistent(client, user_id):
