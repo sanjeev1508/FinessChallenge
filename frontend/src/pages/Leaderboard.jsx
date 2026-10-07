@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { api } from "../api.js";
 import { fmt } from "../sports.js";
 import { ErrorBox, Loading } from "../components/Status.jsx";
+import { useApiRead } from "../useApiRead.js";
 
 const PERIODS = [{ days: 7, label: "This week" }, { days: 30, label: "30 days" }];
 
@@ -21,16 +22,11 @@ function Trend({ entry }) {
 
 export default function Leaderboard({ currentUserId }) {
   const [period, setPeriod] = useState(7);
-  const [data, setData] = useState(null);
-  const [error, setError] = useState(null);
   const [query, setQuery] = useState("");
-
-  const load = useCallback(() => {
-    api.leaderboard(period).then((d) => { setData(d); setError(null); }).catch(setError);
-  }, [period]);
+  const request = useCallback((signal) => api.leaderboard(period, { signal }), [period]);
+  const { data, error, load } = useApiRead(request);
 
   useEffect(() => {
-    load();
     const t = setInterval(load, 30000);          // keep standings fresh
     window.addEventListener("focus", load);
     return () => { clearInterval(t); window.removeEventListener("focus", load); };

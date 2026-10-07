@@ -6,6 +6,7 @@ import { api } from "../api.js";
 import { SPORTS, SPORT_KEYS, describeValue, fmt } from "../sports.js";
 import { ErrorBox, Loading } from "../components/Status.jsx";
 import UserPicker from "../components/UserPicker.jsx";
+import { useApiRead } from "../useApiRead.js";
 
 const WINDOWS = [14, 30, 90];
 const VOLUME = {
@@ -35,20 +36,11 @@ export default function Dashboard({ userId, setUserId }) {
   const isMe = viewing && viewing === userId;
   const [days, setDays] = useState(30);
   const [volume, setVolume] = useState("cumulative");
-  const [data, setData] = useState(null);
-  const [error, setError] = useState(null);
-
-  const load = useCallback(() => {
-    if (!viewing) return;
-    setError(null);
-    api.dashboard(viewing, days).then(setData).catch((e) => {
-      setError(e);
-      if (e.status === 404 && isMe) setUserId(null);   // stale saved id
-    });
-  }, [viewing, days, isMe, setUserId]);
-
-  useEffect(() => { setData(null); }, [viewing]);
-  useEffect(() => { load(); }, [load]);
+  const request = useCallback((signal) => api.dashboard(viewing, days, { signal }), [viewing, days]);
+  const { data, error, load } = useApiRead(request, Boolean(viewing));
+  useEffect(() => {
+    if (error?.status === 404 && isMe) setUserId(null);
+  }, [error, isMe, setUserId]);
 
   const pie = useMemo(() => (data?.bySport ?? []).filter((s) => s.points > 0), [data]);
   const volumeData = useMemo(() => {

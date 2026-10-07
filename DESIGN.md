@@ -257,6 +257,8 @@ Any user's dashboard is viewable via `/dashboard/:id`, which makes the leaderboa
 
 The points preview on the log form mirrors the server formula for instant feedback, but the server always recomputes and its number is what gets stored and shown.
 
+Read requests share `useApiRead`: superseded requests are aborted and guarded so late data/errors cannot replace the current athlete or period. Cleanup cancels reads on unmount; the user picker surfaces loading and retryable failures. Native Node tests exercise out-of-order responses, stale failures and cancellation without another test framework.
+
 ---
 
 ## f. Trade-offs & edge cases
