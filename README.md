@@ -1,5 +1,7 @@
 # Fitness Challenge
 
+[![Checks](https://github.com/sanjeev1508/FinessChallenge/actions/workflows/ci.yml/badge.svg)](https://github.com/sanjeev1508/FinessChallenge/actions/workflows/ci.yml)
+
 Log runs, walks, rides, swims, gym sessions and daily steps. Every activity converts to points, so everyone competes on one leaderboard, and each person gets a dashboard of their training.
 
 React frontend · FastAPI backend · SQLite (in-memory by default). See [DESIGN.md](DESIGN.md) for the full design document.
@@ -45,7 +47,7 @@ python -m venv .venv
 source .venv/bin/activate            # Windows: .venv\Scripts\activate
 pip install -r requirements-dev.txt
 uvicorn app.main:app --reload        # http://localhost:8000, API docs at /docs
-pytest -q                            # 39 tests
+pytest -q                            # API, scoring and concurrency regressions
 
 # Frontend (Node.js 20.19+ or 22.12+, only for UI development)
 # In a second terminal:
@@ -53,7 +55,15 @@ cd frontend
 npm ci
 npm run dev                          # http://localhost:5173, proxies /api to :8000
 npm run build                        # rebuilds into backend/app/static
+npm test                             # Node's built-in test runner; no extra framework
+npm audit                            # dependency advisories
 ```
+
+## Automated checks
+
+GitHub Actions runs backend tests on Windows and Linux with Python 3.10 and 3.14, using both in-memory and file SQLite. Frontend checks cover scoring previews, API errors, cancellation, UTC dates and bundle budgets, plus a production build and dependency audit. CI also verifies that the committed frontend bundle matches its source.
+
+The initial JavaScript bundle must stay below 250 kB and every JavaScript chunk below 500 kB. Build before running frontend tests if you changed UI source.
 
 ## API quick reference
 
