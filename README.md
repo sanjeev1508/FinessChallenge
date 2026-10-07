@@ -47,9 +47,10 @@ pip install -r requirements-dev.txt
 uvicorn app.main:app --reload        # http://localhost:8000, API docs at /docs
 pytest -q                            # 39 tests
 
-# Frontend (only if you want to change the UI), in a second terminal
+# Frontend (Node.js 20.19+ or 22.12+, only for UI development)
+# In a second terminal:
 cd frontend
-npm install
+npm ci
 npm run dev                          # http://localhost:5173, proxies /api to :8000
 npm run build                        # rebuilds into backend/app/static
 ```
