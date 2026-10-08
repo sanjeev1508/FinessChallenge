@@ -5,15 +5,16 @@ Reliability notes
 * In-memory SQLite: every connection normally gets its *own* empty database,
   so we use StaticPool to share one connection across the app. A single
   sqlite3 connection must not run two transactions at once, so access is
-  serialised with a process-wide lock (``get_db``). Throughput is still far
-  above what this app needs (each request holds the lock for ~1 ms).
+  serialised with an async request gate (``get_db``). Waiting requests do not
+  occupy the worker threads needed to run the request holding the connection.
 * File SQLite: normal connection pool, WAL journal mode and a busy timeout so
   concurrent writers wait instead of failing with "database is locked".
 * Foreign keys are switched on for every connection (SQLite default is off).
 """
-import threading
-from typing import Iterator
+from typing import AsyncIterator
 
+import anyio
+from fastapi import Request
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 from sqlalchemy.pool import StaticPool
@@ -54,26 +55,25 @@ class Base(DeclarativeBase):
     pass
 
 
-# threading.Lock (not RLock) on purpose: FastAPI may run the setup and the
-# teardown of a sync dependency on different worker threads, and a plain Lock
-# can be released from any thread.
-_memory_db_lock = threading.Lock()
-
-
-def get_db() -> Iterator[Session]:
+async def get_db(request: Request) -> AsyncIterator[Session]:
     """FastAPI dependency yielding a session; always rolled back/closed."""
-    if IS_MEMORY:
-        _memory_db_lock.acquire()
-    db = SessionLocal()
+    lock = request.app.state.memory_db_lock if IS_MEMORY else None
+    if lock is not None:
+        await lock.acquire()
     try:
-        yield db
-    except Exception:
-        db.rollback()
-        raise
+        db = SessionLocal()
+        try:
+            yield db
+        finally:
+            # close() rolls back uncommitted work. Finish it before handing the
+            # shared connection to another request, even after cancellation.
+            with anyio.CancelScope(shield=True):
+                # Like FastAPI's sync dependency teardown, cleanup must not
+                # compete with workers waiting for a pooled DB connection.
+                await anyio.to_thread.run_sync(db.close, limiter=anyio.CapacityLimiter(1))
     finally:
-        db.close()
-        if IS_MEMORY:
-            _memory_db_lock.release()
+        if lock is not None:
+            lock.release()
 
 
 def init_db() -> None:

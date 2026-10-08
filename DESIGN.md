@@ -272,7 +272,7 @@ The dashboard is route-lazy-loaded, keeping Recharts out of the initial leaderbo
 | Decision | Benefit | Cost / mitigation |
 |---|---|---|
 | In-memory SQLite (default) | No setup, fast, clean slate per run | Data is lost on restart. Set `DATABASE_URL=sqlite:///./fitness.db` to persist; demo data is reseeded on an empty DB |
-| Single shared connection + lock for in-memory mode | In-memory SQLite is per-connection, so sharing one connection is the only way the whole app sees one DB; the lock keeps transactions from interleaving | Writes are serialised. At ~1 ms per request that is hundreds of req/s, ample here. File mode uses a normal pool with WAL + busy timeout |
+| Single shared connection + async gate for in-memory mode | One connection gives the whole app the same DB; the gate keeps request sessions from interleaving | All DB requests are serialised, including reads. Waiting uses no worker threads, preventing worker-pool deadlock during bursts. Cancellation-safe session cleanup finishes before the gate is released. File mode uses a normal pool with WAL + busy timeout |
 | Materialised `leaderboard_entries` | O(users) leaderboard reads | Two writes per activity, kept consistent by a single transaction and atomic `UPDATE x = x + n`; rebuildable from `activities` |
 | Trend computed on read from submission timestamps | Backdated workouts cannot rewrite past ranks; no snapshot jobs | O(activities) query per leaderboard load; assumes the current append-only activity model. Future edit/delete features need an immutable event log or snapshots |
 | Points stored at write time | Fast reads, history stable if rules change | Rule changes need an explicit rescoring migration |
@@ -287,6 +287,7 @@ The dashboard is route-lazy-loaded, keeping Recharts out of the initial leaderbo
 |---|---|
 | Concurrent identical registrations | `UNIQUE` constraint + `IntegrityError` → 409. Test: 10 parallel requests → exactly one 201 and nine 409s |
 | Concurrent activity posts for one user | Serialised transaction + atomic increment. Test: 80 parallel posts → total exactly 8,000 |
+| Request bursts exceed available worker threads | Async admission for the shared in-memory connection leaves workers available for the active request. Regression: 64 writes plus 64 health reads complete with four worker slots and exact totals; cancelled and failed sessions release the gate and roll back uncommitted work |
 | Double-click / network retry | `clientRequestId` returns the original activity (200, `Idempotent-Replay`). The UI generates one key per form submission |
 | Floating-point flooring errors | Integer metres via `Decimal` (0.29 km running = 29, not 28) |
 | Sub-unit activity (0.039 km cycling, 0:59 gym, 99 steps) | Accepted, scores 0 points (spec floors; the activity is still history) |
