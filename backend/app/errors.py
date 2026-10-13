@@ -48,8 +48,10 @@ def register_error_handlers(app: FastAPI) -> None:
 
     @app.exception_handler(StarletteHTTPException)
     async def _http(_: Request, exc: StarletteHTTPException):
-        code = {404: "NOT_FOUND", 405: "METHOD_NOT_ALLOWED"}.get(exc.status_code, "HTTP_ERROR")
-        return JSONResponse(status_code=exc.status_code, content=_body(code, str(exc.detail)))
+        code = {401: "UNAUTHORIZED", 403: "FORBIDDEN", 404: "NOT_FOUND",
+                405: "METHOD_NOT_ALLOWED"}.get(exc.status_code, "HTTP_ERROR")
+        return JSONResponse(status_code=exc.status_code, content=_body(code, str(exc.detail)),
+                            headers=exc.headers)
 
     @app.exception_handler(Exception)
     async def _unhandled(_: Request, exc: Exception):

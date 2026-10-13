@@ -82,7 +82,11 @@ export default function Leaderboard({ currentUserId }) {
                 className={`board-row ${e.rank <= 3 && e.totalPoints > 0 ? `medal-${e.rank}` : ""} ${e.userId === currentUserId ? "is-me" : ""}`}>
               <span className="rank">{e.rank}</span>
               <span className="athlete">
-                <Link to={`/dashboard/${e.userId}`}>{e.firstName} {e.lastName}</Link>
+                {e.userId === currentUserId
+                  ? <Link to="/dashboard">{e.firstName} {e.lastName}</Link>
+                  : currentUserId
+                    ? <Link to={`/dashboard/${e.userId}`}>{e.firstName} {e.lastName}</Link>
+                    : <span className="athlete-name">{e.firstName} {e.lastName}</span>}
                 {e.userId === currentUserId && <span className="you">You</span>}
                 <small>{e.activityCount} {e.activityCount === 1 ? "activity" : "activities"}</small>
               </span>

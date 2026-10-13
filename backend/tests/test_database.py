@@ -50,18 +50,20 @@ def test_concurrent_requests_do_not_starve_database_worker(database_url):
                 async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
                     registered = await client.post("/api/users", json={
                         "firstName": "Concurrent", "lastName": "Athlete",
+                        "email": "concurrent@example.com", "password": "TestPassword123",
                     })
                     assert registered.status_code == 201
-                    uid = registered.json()["userId"]
+                    uid = registered.json()["user"]["userId"]
+                    headers = {"Authorization": f"Bearer {registered.json()['accessToken']}"}
                     writes = [client.post("/api/activities", json={
                         "userId": uid, "sport": "running", "metricType": "distance",
                         "value": 1, "clientRequestId": f"burst-{i}",
-                    }) for i in range(64)]
+                    }, headers=headers) for i in range(64)]
                     reads = [client.get("/api/health") for _ in range(64)]
                     results = await asyncio.gather(*writes, *reads)
                     assert all(r.status_code == 201 for r in results[:64])
                     assert all(r.status_code == 200 for r in results[64:])
-                    user = (await client.get(f"/api/users/{uid}")).json()
+                    user = (await client.get(f"/api/users/{uid}", headers=headers)).json()
                     assert user["totalPoints"] == 6400
                     assert user["activityCount"] == 64
                     assert (await client.get("/api/health")).status_code == 200
@@ -145,9 +147,16 @@ def test_database_gate_recovers_after_cancellation_and_errors(database_url):
                 transport = httpx.ASGITransport(app=app)
                 async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
                     assert (await client.get("/api/health")).status_code == 200
-                    users = await client.get("/api/users")
+                    registered = await client.post("/api/users", json={
+                        "firstName": "Cleanup", "lastName": "Check",
+                        "email": "cleanup@example.com", "password": "TestPassword123",
+                    })
+                    assert registered.status_code == 201
+                    headers = {"Authorization": f"Bearer {registered.json()['accessToken']}"}
+                    users = await client.get("/api/users", headers=headers)
                     assert users.status_code == 200
-                    assert users.json() == [], "Uncommitted users survived cleanup"
+                    assert [user["firstName"] for user in users.json()] == ["Cleanup"], \
+                        "Uncommitted users survived cleanup"
 
         anyio.run(main)
     """, database_url)
