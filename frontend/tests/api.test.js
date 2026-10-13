@@ -1,6 +1,18 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { api, ApiError, requestId } from "../src/api.js";
+import { api, ApiError, requestId, setAccessToken } from "../src/api.js";
+
+test("registration sends required email and password and returns the session", async (t) => {
+  const body = { firstName: "Test", lastName: "Runner", email: "test@example.com", password: "TestPassword123" };
+  const session = { accessToken: "new-token", user: { userId: "athlete" } };
+  t.mock.method(globalThis, "fetch", async (url, options) => {
+    assert.equal(url, "/api/users");
+    assert.equal(options.method, "POST");
+    assert.deepEqual(JSON.parse(options.body), body);
+    return Response.json(session, { status: 201 });
+  });
+  assert.deepEqual(await api.register(body), session);
+});
 
 test("dashboard reads forward cancellation and query parameters", async (t) => {
   const controller = new AbortController();
@@ -55,4 +67,34 @@ test("activity POST preserves its idempotency key and body", async (t) => {
     return Response.json({ points: 77 });
   });
   assert.deepEqual(await api.logActivity(body), { points: 77 });
+});
+
+test("private requests include a bearer token", async (t) => {
+  t.after(() => setAccessToken(null));
+  setAccessToken("test-access-token");
+  t.mock.method(globalThis, "fetch", async (url, options) => {
+    assert.equal(url, "/api/auth/me");
+    assert.equal(options.headers.Authorization, "Bearer test-access-token");
+    return Response.json({ userId: "athlete" });
+  });
+  assert.deepEqual(await api.me(), { userId: "athlete" });
+});
+
+test("expired tokens are cleared after an unauthorized response", async (t) => {
+  t.after(() => setAccessToken(null));
+  setAccessToken("expired-token");
+  let calls = 0;
+  t.mock.method(globalThis, "fetch", async (url, options) => {
+    calls += 1;
+    if (calls === 1) {
+      assert.equal(url, "/api/auth/me");
+      assert.equal(options.headers.Authorization, "Bearer expired-token");
+      return Response.json({ error: { code: "UNAUTHORIZED", message: "Expired" } }, { status: 401 });
+    }
+    assert.equal(url, "/api/leaderboard?trendDays=7");
+    assert.equal(options.headers.Authorization, undefined);
+    return Response.json({ entries: [] });
+  });
+  await assert.rejects(api.me(), { status: 401 });
+  assert.deepEqual(await api.leaderboard(), { entries: [] });
 });
