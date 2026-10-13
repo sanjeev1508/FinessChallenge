@@ -39,10 +39,24 @@ class User(Base):
     activities: Mapped[list["Activity"]] = relationship(back_populates="user", cascade="all, delete-orphan")
     leaderboard: Mapped["LeaderboardEntry"] = relationship(back_populates="user", cascade="all, delete-orphan",
                                                            uselist=False)
+    auth_account: Mapped["AuthAccount | None"] = relationship(back_populates="user", cascade="all, delete-orphan",
+                                                              uselist=False)
 
     __table_args__ = (
         UniqueConstraint("first_name_key", "last_name_key", name="uq_users_full_name"),
     )
+
+
+class AuthAccount(Base):
+    """Login credentials, separate so existing users remain valid legacy records."""
+    __tablename__ = "auth_accounts"
+
+    user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    email: Mapped[str] = mapped_column(String(254), nullable=False, unique=True)
+    password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+
+    user: Mapped[User] = relationship(back_populates="auth_account")
 
 
 class Activity(Base):

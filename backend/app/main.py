@@ -1,6 +1,6 @@
 """Application entry point: API + (optionally) the built React frontend."""
-import logging
-from contextlib import asynccontextmanager
+import logging #server console
+from contextlib import asynccontextmanager  # run setup , cleanup
 from pathlib import Path
 
 import anyio
@@ -37,6 +37,14 @@ app = FastAPI(title="Fitness Challenge API", version="1.0.0", lifespan=lifespan,
 app.add_middleware(CORSMiddleware, allow_origins=config.CORS_ORIGINS, allow_methods=["*"], allow_headers=["*"])
 register_error_handlers(app)
 app.include_router(router)
+
+
+@app.middleware("http")
+async def prevent_stale_frontend_shell(request, call_next):
+    response = await call_next(request)
+    if request.url.path in {"/", "/index.html"} and response.headers.get("content-type", "").startswith("text/html"):
+        response.headers["Cache-Control"] = "no-cache"
+    return response
 
 
 @app.api_route("/api/{path:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE"], include_in_schema=False)

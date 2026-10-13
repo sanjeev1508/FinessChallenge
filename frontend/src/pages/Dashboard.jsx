@@ -1,11 +1,10 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { useCallback, useMemo, useState } from "react";
+import { Link, useParams } from "react-router-dom";
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Legend, Pie, PieChart,
   ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { api } from "../api.js";
 import { SPORTS, SPORT_KEYS, describeValue, fmt } from "../sports.js";
 import { ErrorBox, Loading } from "../components/Status.jsx";
-import UserPicker from "../components/UserPicker.jsx";
 import { useApiRead } from "../useApiRead.js";
 import { formatDate } from "../calendar.js";
 
@@ -30,19 +29,14 @@ function Stat({ value, label, sub }) {
   );
 }
 
-export default function Dashboard({ userId, setUserId }) {
-  const { id: routeId } = useParams();
-  const nav = useNavigate();
-  const viewing = routeId || userId;
-  const isMe = viewing && viewing === userId;
+export default function Dashboard({ userId }) {
+  const { viewedUserId } = useParams();
+  const viewing = viewedUserId || userId;
+  const isMe = viewing === userId;
   const [days, setDays] = useState(30);
   const [volume, setVolume] = useState("cumulative");
   const request = useCallback((signal) => api.dashboard(viewing, days, { signal }), [viewing, days]);
   const { data, error, load } = useApiRead(request, Boolean(viewing));
-  useEffect(() => {
-    if (error?.status === 404 && isMe) setUserId(null);
-  }, [error, isMe, setUserId]);
-
   const pie = useMemo(() => (data?.bySport ?? []).filter((s) => s.points > 0), [data]);
   const volumeData = useMemo(() => {
     if (!data) return [];
@@ -53,8 +47,8 @@ export default function Dashboard({ userId, setUserId }) {
     return (
       <section className="narrow">
         <h1 className="display">My dashboard</h1>
-        <p className="lede">Choose your name to see your history, or join if you're new.</p>
-        <UserPicker value={null} onChange={setUserId} />
+        <p className="lede">Log in to see your training history.</p>
+        <Link className="btn primary" to="/login">Log in</Link>
       </section>
     );
   }
@@ -77,7 +71,7 @@ export default function Dashboard({ userId, setUserId }) {
           </p>
         </div>
         <div className="dash-actions">
-          {!isMe && <button className="btn ghost" onClick={() => { setUserId(user.userId); nav("/dashboard"); }}>This is me</button>}
+          <Link className="btn ghost" to="/">Back to leaderboard</Link>
           {isMe && <Link className="btn primary" to="/log">Log activity</Link>}
         </div>
       </div>

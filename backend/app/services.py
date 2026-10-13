@@ -1,16 +1,16 @@
 """Business logic. Routers stay thin; everything transactional lives here."""
 from collections import defaultdict
-from datetime import date, timedelta
+from datetime import date, datetime, time, timedelta, timezone
 
 from sqlalchemy import func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from .errors import ApiError
-from .models import SPORTS, Activity, LeaderboardEntry, User, utc_today, utcnow
-from .schemas import ActivityCreate, UserCreate, normalise_name
+from .models import AuthAccount, SPORTS, Activity, LeaderboardEntry, User, utc_today, utcnow
+from .schemas import ActivityCreate, AuthLogin, AuthRegister, UserCreate, normalise_name
 from .scoring import calculate_points
-from datetime import datetime, time, timezone
+from .auth import hash_password, verify_password
 
 
 def as_utc(dt: datetime | None) -> datetime | None:
@@ -56,6 +56,41 @@ def register_user(db: Session, data: UserCreate) -> User:
             raise _duplicate(existing)
         raise
     return user
+
+
+def register_account(db: Session, data: AuthRegister) -> User:
+    first_key, last_key = normalise_name(data.firstName), normalise_name(data.lastName)
+    existing = _find_by_name(db, first_key, last_key)
+    if existing:
+        raise _duplicate(existing)
+    if db.scalar(select(AuthAccount).where(AuthAccount.email == data.email)) or db.scalar(
+        select(User.id).where(func.lower(User.email) == data.email)
+    ):
+        raise ApiError(409, "DUPLICATE_EMAIL", "An account with this email already exists.")
+
+    user = User(first_name=data.firstName, last_name=data.lastName, email=data.email,
+                first_name_key=first_key, last_name_key=last_key)
+    user.leaderboard = LeaderboardEntry(total_points=0, activity_count=0)
+    user.auth_account = AuthAccount(email=data.email, password_hash=hash_password(data.password))
+    db.add(user)
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        if db.scalar(select(AuthAccount).where(AuthAccount.email == data.email)):
+            raise ApiError(409, "DUPLICATE_EMAIL", "An account with this email already exists.")
+        existing = _find_by_name(db, first_key, last_key)
+        if existing:
+            raise _duplicate(existing)
+        raise
+    return user
+
+
+def authenticate_user(db: Session, data: AuthLogin) -> User:
+    account = db.scalar(select(AuthAccount).where(AuthAccount.email == data.email))
+    if account is None or not verify_password(data.password, account.password_hash):
+        raise ApiError(401, "INVALID_CREDENTIALS", "Email or password is incorrect.")
+    return account.user
 
 
 def _duplicate(existing: User) -> ApiError:

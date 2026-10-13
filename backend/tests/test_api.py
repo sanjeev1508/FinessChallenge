@@ -2,37 +2,175 @@ import threading
 from datetime import date, datetime, time, timedelta, timezone
 
 import pytest
+from sqlalchemy import select
 
 from app.database import SessionLocal
-from app.models import Activity, User, utc_today
+from app.models import Activity, AuthAccount, User, utc_today
+from app.schemas import UserCreate
+from app.services import register_user as register_legacy_user
 
 
 # ------------------------------------------------------------ registration
 
-def test_register_returns_user_id(client):
-    r = client.post("/api/users", json={"firstName": "Priya", "lastName": "Raman", "email": "P@X.com"})
+def test_frontend_shell_revalidates_after_build(client):
+    response = client.get("/")
+    assert response.status_code == 200
+    assert response.headers["cache-control"] == "no-cache"
+
+
+def register(client, first_name, last_name, email):
+    return client.post("/api/users", json={
+        "firstName": first_name, "lastName": last_name,
+        "email": email, "password": "TestPassword123",
+    })
+
+
+def test_register_returns_user_id_and_token(client):
+    r = register(client, "Priya", "Raman", "P@X.com")
     assert r.status_code == 201
     body = r.json()
-    assert len(body["userId"]) == 36 and body["email"] == "p@x.com"
+    assert len(body["user"]["userId"]) == 36
+    assert body["user"]["email"] == "p@x.com"
+    assert body["tokenType"] == "bearer"
+    assert body["accessToken"]
+    assert "password" not in body and "passwordHash" not in body
+    with SessionLocal() as db:
+        account = db.scalar(select(AuthAccount).where(AuthAccount.email == "p@x.com"))
+        assert account is not None
+        assert account.password_hash != "TestPassword123"
+        assert account.password_hash.startswith("$argon2")
+
+
+def test_login_issues_token_and_rejects_bad_password(client):
+    register(client, "Priya", "Raman", "priya@example.com")
+    valid = client.post("/api/auth/login", json={
+        "email": "PRIYA@example.com", "password": "TestPassword123",
+    })
+    assert valid.status_code == 200
+    assert valid.json()["user"]["email"] == "priya@example.com"
+    assert valid.json()["accessToken"]
+
+    invalid = client.post("/api/auth/login", json={
+        "email": "priya@example.com", "password": "WrongPassword123",
+    })
+    assert invalid.status_code == 401
+    assert invalid.json()["error"]["code"] == "INVALID_CREDENTIALS"
+
+    me = client.get("/api/auth/me", headers={"Authorization": f"Bearer {valid.json()['accessToken']}"})
+    assert me.status_code == 200
+    assert me.json()["email"] == "priya@example.com"
+
+
+def test_duplicate_email_is_rejected(client):
+    register(client, "Priya", "Raman", "priya@example.com")
+    duplicate = register(client, "Asha", "Kumar", "PRIYA@example.com")
+    assert duplicate.status_code == 409
+    assert duplicate.json()["error"]["code"] == "DUPLICATE_EMAIL"
+
+
+def test_legacy_users_are_preserved_but_cannot_login(client):
+    with SessionLocal() as db:
+        register_legacy_user(db, UserCreate(
+            firstName="Legacy", lastName="Runner", email="legacy@example.com",
+        ))
+
+    login = client.post("/api/auth/login", json={
+        "email": "legacy@example.com", "password": "AnyPassword123",
+    })
+    assert login.status_code == 401
+    assert login.json()["error"]["code"] == "INVALID_CREDENTIALS"
+    board = client.get("/api/leaderboard").json()["entries"]
+    assert any(entry["firstName"] == "Legacy" for entry in board)
+
+
+def test_private_routes_require_a_valid_token(client):
+    registered = register(client, "Priya", "Raman", "priya@example.com").json()
+    uid = registered["user"]["userId"]
+    activity = {"userId": uid, "sport": "running", "metricType": "distance", "value": 1}
+    assert client.post("/api/activities", json=activity).status_code == 401
+    assert client.get("/api/users").status_code == 401
+    assert client.get(f"/api/users/{uid}").status_code == 401
+    assert client.get(f"/api/users/{uid}/dashboard").status_code == 401
+    assert client.get("/api/activities").status_code == 401
+
+    client.headers.update({"Authorization": "Bearer invalid-token"})
+    unauthorized = client.get(f"/api/users/{uid}/dashboard")
+    assert unauthorized.status_code == 401
+    assert unauthorized.headers["www-authenticate"] == "Bearer"
+
+
+def test_authenticated_user_list_does_not_expose_emails(client, user_id):
+    users = client.get("/api/users")
+    assert users.status_code == 200
+    assert any(user["userId"] == user_id for user in users.json())
+    assert all("email" not in user for user in users.json())
+
+
+def test_token_cannot_access_private_account_or_write_for_another_user(client):
+    first = register(client, "Priya", "Raman", "priya@example.com").json()
+    second = register(client, "Asha", "Kumar", "asha@example.com").json()
+    client.headers.update({"Authorization": f"Bearer {first['accessToken']}"})
+    other_id = second["user"]["userId"]
+
+    response = client.post("/api/activities", json={
+        "userId": other_id, "sport": "running", "metricType": "distance", "value": 1,
+    })
+    assert response.status_code == 403
+    assert response.json()["error"]["code"] == "FORBIDDEN"
+    assert client.get(f"/api/users/{other_id}/dashboard").status_code == 200
+    assert client.get(f"/api/activities?userId={other_id}").status_code == 403
+
+
+def test_other_dashboard_is_read_only_and_hides_email_and_notes(client):
+    first = register(client, "Priya", "Raman", "priya@example.com").json()
+    second = register(client, "Asha", "Kumar", "asha@example.com").json()
+    uid = second["user"]["userId"]
+    owner_headers = {"Authorization": f"Bearer {second['accessToken']}"}
+    response = client.post("/api/activities", headers=owner_headers, json={
+        "userId": uid, "sport": "running", "metricType": "distance",
+        "value": 2, "notes": "Private training note",
+    })
+    assert response.status_code == 201
+    owner = client.get(f"/api/users/{uid}/dashboard", headers=owner_headers).json()
+    assert owner["user"]["email"] == "asha@example.com"
+    assert owner["recentActivities"][0]["notes"] == "Private training note"
+    client.headers.update({"Authorization": f"Bearer {first['accessToken']}"})
+    response = client.get(f"/api/users/{uid}/dashboard")
+    assert response.status_code == 200
+    shared = response.json()
+    assert shared["user"]["userId"] == uid
+    assert shared["summary"]["totalPoints"] == 200
+    assert "email" not in shared["user"]
+    assert "notes" not in shared["recentActivities"][0]
+    assert shared["timeline"] == owner["timeline"]
+    assert shared["bySport"] == owner["bySport"]
+    assert client.post("/api/activities", json={
+        "userId": uid, "sport": "running", "metricType": "distance", "value": 1,
+    }).status_code == 403
 
 
 def test_duplicate_names_rejected_case_and_space_insensitive(client):
-    first = client.post("/api/users", json={"firstName": "Priya", "lastName": "Raman"}).json()
-    r = client.post("/api/users", json={"firstName": "  PRIYA ", "lastName": "raman"})
+    first = register(client, "Priya", "Raman", "priya@example.com").json()
+    r = register(client, "  PRIYA ", "raman", "priya2@example.com")
     assert r.status_code == 409
     assert r.json()["error"]["code"] == "DUPLICATE_USER"
-    assert r.json()["error"]["existingUserId"] == first["userId"]
+    assert r.json()["error"]["existingUserId"] == first["user"]["userId"]
 
 
 def test_same_first_name_different_last_name_ok(client):
-    assert client.post("/api/users", json={"firstName": "Priya", "lastName": "Raman"}).status_code == 201
-    assert client.post("/api/users", json={"firstName": "Priya", "lastName": "Iyer"}).status_code == 201
+    assert register(client, "Priya", "Raman", "priya@example.com").status_code == 201
+    assert register(client, "Priya", "Iyer", "priya.iyer@example.com").status_code == 201
 
 
 def test_register_validation(client):
-    for body in [{}, {"firstName": "A"}, {"firstName": "", "lastName": "B"}, {"firstName": "R2D2", "lastName": "X"},
-                 {"firstName": "A", "lastName": "B", "extra": 1}, {"firstName": 5, "lastName": "B"},
-                 {"firstName": "A", "lastName": "B", "email": "nope"}]:
+    valid = {"firstName": "A", "lastName": "B", "email": "a@example.com", "password": "TestPassword123"}
+    invalid = [
+        {}, {"firstName": "A"}, {"firstName": "", "lastName": "B"},
+        {"firstName": "R2D2", "lastName": "X", "email": "x@example.com", "password": "TestPassword123"},
+        {**valid, "extra": 1}, {**valid, "firstName": 5},
+        {**valid, "email": "nope"}, {**valid, "password": "short"},
+    ]
+    for body in invalid:
         r = client.post("/api/users", json=body)
         assert r.status_code == 400, body
         assert r.json()["error"]["code"] == "VALIDATION_ERROR"
@@ -48,7 +186,7 @@ def test_concurrent_duplicate_registration_only_one_wins(client):
     results = []
 
     def go():
-        results.append(client.post("/api/users", json={"firstName": "Race", "lastName": "Condition"}).status_code)
+        results.append(register(client, "Race", "Condition", "race@example.com").status_code)
 
     threads = [threading.Thread(target=go) for _ in range(10)]
     [t.start() for t in threads]
@@ -101,7 +239,7 @@ def test_nan_rejected(client, user_id):
 def test_bad_user_and_dates(client, user_id):
     assert post(client, "not-a-uuid", "running", "distance", 1).status_code == 400
     r = post(client, "00000000-0000-0000-0000-000000000000", "running", "distance", 1)
-    assert r.status_code == 404 and r.json()["error"]["code"] == "USER_NOT_FOUND"
+    assert r.status_code == 403 and r.json()["error"]["code"] == "FORBIDDEN"
     assert post(client, user_id, "running", "distance", 1,
                 activityDate=str(utc_today() + timedelta(days=1))).status_code == 400
 
@@ -178,16 +316,22 @@ def test_concurrent_ingestion_totals_consistent(client, user_id):
 
 def test_leaderboard_ranking_ties_and_trend(client):
     ids = {}
+    tokens = {}
     for name in ["Ann", "Bob", "Cat"]:
-        ids[name] = client.post("/api/users", json={"firstName": name, "lastName": "Test"}).json()["userId"]
+        response = register(client, name, "Test", f"{name.lower()}@example.com").json()
+        ids[name] = response["user"]["userId"]
+        tokens[name] = response["accessToken"]
     old = str(utc_today() - timedelta(days=10))
+    client.headers.update({"Authorization": f"Bearer {tokens['Ann']}"})
     activity = post(client, ids["Ann"], "running", "distance", 5, activityDate=old).json()
     with SessionLocal() as db:
         timestamp = datetime.combine(date.fromisoformat(old), time.min, tzinfo=timezone.utc)
         db.get(User, ids["Ann"]).created_at = timestamp
         db.get(Activity, activity["activityId"]).created_at = timestamp
         db.commit()
+    client.headers.update({"Authorization": f"Bearer {tokens['Bob']}"})
     post(client, ids["Bob"], "running", "distance", 6)                     # Bob overtakes today
+    client.headers.update({"Authorization": f"Bearer {tokens['Cat']}"})
     post(client, ids["Cat"], "running", "distance", 6)                     # tie with Bob
     board = client.get("/api/leaderboard").json()["entries"]
     ranks = {e["firstName"]: e for e in board}

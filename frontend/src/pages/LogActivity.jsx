@@ -1,13 +1,11 @@
 import { useMemo, useState } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { api, requestId } from "../api.js";
 import { SPORTS, SPORT_KEYS, describeValue, fmt, previewPoints } from "../sports.js";
 import { ErrorBox } from "../components/Status.jsx";
-import UserPicker from "../components/UserPicker.jsx";
 import { todayISO } from "../calendar.js";
 
-export default function LogActivity({ userId, setUserId }) {
-  const welcome = useLocation().state?.welcome;
+export default function LogActivity({ userId }) {
   const [sport, setSport] = useState("running");
   const [km, setKm] = useState("");
   const [minutes, setMinutes] = useState("");
@@ -58,10 +56,8 @@ export default function LogActivity({ userId, setUserId }) {
 
   return (
     <section className="narrow" aria-labelledby="log-title">
-      <h1 id="log-title" className="display">{welcome ? `Welcome, ${welcome}` : "Log activity"}</h1>
+      <h1 id="log-title" className="display">Log activity</h1>
       <p className="lede">Pick a sport, enter what you did, and the points land on the board instantly.</p>
-
-      <UserPicker value={userId} onChange={setUserId} />
 
       <form className="form" onSubmit={submit} noValidate>
         <fieldset className="sport-grid">

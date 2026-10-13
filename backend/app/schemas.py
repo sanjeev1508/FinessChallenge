@@ -70,6 +70,58 @@ class UserOut(BaseModel):
     activityCount: int = 0
 
 
+class PublicUserOut(BaseModel):
+    userId: str
+    firstName: str
+    lastName: str
+    createdAt: datetime
+    totalPoints: int = 0
+    activityCount: int = 0
+
+
+class AuthRegister(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    firstName: StrictStr = Field(min_length=1, max_length=50)
+    lastName: StrictStr = Field(min_length=1, max_length=50)
+    email: StrictStr = Field(min_length=3, max_length=254)
+    password: StrictStr = Field(min_length=8, max_length=128)
+
+    @field_validator("firstName", "lastName")
+    @classmethod
+    def _names(cls, value: str) -> str:
+        return _clean_name(value)
+
+    @field_validator("email")
+    @classmethod
+    def _email(cls, value: str) -> str:
+        value = value.strip()
+        if not EMAIL_RE.match(value):
+            raise ValueError("is not a valid email address")
+        return value.lower()
+
+
+class AuthLogin(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    email: StrictStr = Field(min_length=3, max_length=254)
+    password: StrictStr = Field(min_length=1, max_length=128)
+
+    @field_validator("email")
+    @classmethod
+    def _email(cls, value: str) -> str:
+        value = value.strip()
+        if not EMAIL_RE.match(value):
+            raise ValueError("is not a valid email address")
+        return value.lower()
+
+
+class AuthTokenOut(BaseModel):
+    accessToken: str
+    tokenType: str = "bearer"
+    user: UserOut
+
+
 # ------------------------------------------------------------- activities
 
 class ActivityCreate(BaseModel):
